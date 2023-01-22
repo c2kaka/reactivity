@@ -1,13 +1,29 @@
 const data = {
   text: "vue3",
+  ok: true,
 };
 
 const bucket = new WeakMap<any, Map<string | symbol, Set<Function>>>();
 
-let activeEffect: Function;
+let activeEffect: any;
 function effect(fn: Function) {
-  activeEffect = fn;
-  fn();
+  const effectFn: any = () => {
+    cleanup(effectFn);
+    activeEffect = effectFn;
+    fn();
+  };
+
+  effectFn.deps = [];
+  effectFn();
+}
+
+function cleanup(effectFn: any) {
+  for (let index = 0; index < effectFn.deps.length; index++) {
+    const deps = effectFn.deps[index];
+    deps.delete(effectFn);
+  }
+
+  effectFn.deps.length = 0;
 }
 
 function track(target: any, key: string | symbol) {
@@ -27,12 +43,14 @@ function track(target: any, key: string | symbol) {
     depsMap.set(key, deps);
   }
   deps.add(activeEffect);
+  activeEffect.deps.push(deps);
 }
 
 function trigger(target: any, key: string | symbol) {
   const depsMap = bucket.get(target);
   let deps = depsMap?.get(key) ?? [];
-  deps.forEach((fn) => fn());
+  const depsToRun = new Set(deps);
+  depsToRun.forEach((fn) => fn());
 }
 
 const obj = new Proxy(data, {
@@ -49,9 +67,10 @@ const obj = new Proxy(data, {
 
 effect(() => {
   console.log("effect runs");
-  document.body.innerText = obj.text;
+  document.body.innerText = obj.ok ? obj.text : "not";
 });
 
 setTimeout(() => {
+  obj.ok = false;
   obj.text = "hello, vue3";
 }, 1000);
