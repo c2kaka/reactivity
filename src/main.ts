@@ -1,6 +1,7 @@
 const data = {
   foo: true,
   bar: true,
+  count: 0,
 };
 
 const bucket = new WeakMap<any, Map<string | symbol, Set<Function>>>();
@@ -52,9 +53,16 @@ function track(target: any, key: string | symbol) {
 
 function trigger(target: any, key: string | symbol) {
   const depsMap = bucket.get(target);
-  let deps = depsMap?.get(key) ?? [];
-  const depsToRun = new Set(deps);
-  depsToRun.forEach((fn) => fn());
+  let effects = depsMap?.get(key) ?? [];
+  
+  const effectsToRun = new Set<Function>();
+  effects.forEach((_effectFn) => {
+    if (_effectFn !== activeEffect) {
+      effectsToRun.add(_effectFn);
+    }
+  })
+  
+  effectsToRun.forEach((fn) => fn());
 }
 
 const obj = new Proxy(data, {
@@ -69,19 +77,4 @@ const obj = new Proxy(data, {
   },
 });
 
-let temp1, temp2;
-effect(function effectFn1() {
-  console.log('effectFn1 runs');
-
-  effect(function effectFn2() {
-    console.log('effectFn2 runs');
-    temp2 = obj.bar;
-  })
-
-  temp1 = obj.foo;
-})
-
-setTimeout(() => {
-  obj.foo = false;
-})
-
+effect(() => obj.count++)
