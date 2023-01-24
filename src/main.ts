@@ -1,16 +1,20 @@
 const data = {
-  text: "vue3",
-  ok: true,
+  foo: true,
+  bar: true,
 };
 
 const bucket = new WeakMap<any, Map<string | symbol, Set<Function>>>();
 
 let activeEffect: any;
+let effectStack: Function[] = [];
 function effect(fn: Function) {
   const effectFn: any = () => {
     cleanup(effectFn);
     activeEffect = effectFn;
+    effectStack.push(effectFn);
     fn();
+    effectStack.pop();
+    activeEffect = effectStack[effectStack.length - 1];
   };
 
   effectFn.deps = [];
@@ -65,12 +69,19 @@ const obj = new Proxy(data, {
   },
 });
 
-effect(() => {
-  console.log("effect runs");
-  document.body.innerText = obj.ok ? obj.text : "not";
-});
+let temp1, temp2;
+effect(function effectFn1() {
+  console.log('effectFn1 runs');
+
+  effect(function effectFn2() {
+    console.log('effectFn2 runs');
+    temp2 = obj.bar;
+  })
+
+  temp1 = obj.foo;
+})
 
 setTimeout(() => {
-  obj.ok = false;
-  obj.text = "hello, vue3";
-}, 1000);
+  obj.foo = false;
+})
+
