@@ -8,7 +8,7 @@ const bucket = new WeakMap<any, Map<string | symbol, Set<Function>>>();
 
 let activeEffect: any;
 let effectStack: Function[] = [];
-function effect(fn: Function) {
+function effect(fn: Function, options = {}) {
   const effectFn: any = () => {
     cleanup(effectFn);
     activeEffect = effectFn;
@@ -19,6 +19,7 @@ function effect(fn: Function) {
   };
 
   effectFn.deps = [];
+  effectFn.options = options;
   effectFn();
 }
 
@@ -55,14 +56,20 @@ function trigger(target: any, key: string | symbol) {
   const depsMap = bucket.get(target);
   let effects = depsMap?.get(key) ?? [];
   
-  const effectsToRun = new Set<Function>();
+  const effectsToRun = new Set<any>();
   effects.forEach((_effectFn) => {
     if (_effectFn !== activeEffect) {
       effectsToRun.add(_effectFn);
     }
   })
   
-  effectsToRun.forEach((fn) => fn());
+  effectsToRun.forEach((fn) => {
+    if (fn?.options?.scheduler) {
+      fn.options.scheduler(fn);
+    } else {
+      fn();
+    }
+  });
 }
 
 const obj = new Proxy(data, {
@@ -77,4 +84,31 @@ const obj = new Proxy(data, {
   },
 });
 
-effect(() => obj.count++)
+const jobQueue = new Set<Function>();
+let isFlushing = false;
+function flushJob() {
+  if (isFlushing) {
+    return;
+  }
+
+  isFlushing = true;
+  Promise.resolve().then(() => {
+    jobQueue.forEach((job) => job());
+  }).finally(
+    () => {
+      isFlushing = false;
+    }
+  )
+}
+
+effect(() => {
+  console.log(obj.count);
+}, {
+  scheduler(fn: Function) {
+    jobQueue.add(fn);
+    flushJob();
+  }
+})
+
+obj.count++;
+obj.count++;
